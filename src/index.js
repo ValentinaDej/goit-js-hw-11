@@ -9,6 +9,7 @@ Notiflix.Notify.init({
 });
 
 const THROTTLE_DELAY = 300;
+
 const searchQuery = {
   url: 'https://pixabay.com/api/',
   key: '31094893-91e9afbe8165d9cedcce56644',
@@ -18,8 +19,29 @@ const searchQuery = {
   safesearch: 'true',
   perPage: 40,
   page: 1,
+
   countPageLimit() {
     return Math.ceil(500 / this.perPage);
+  },
+
+  createFullUrl() {
+    return (
+      this.url +
+      '?key=' +
+      this.key +
+      '&q=' +
+      encodeURIComponent(this.q) +
+      '&image_type=' +
+      this.imageType +
+      '&orientation=' +
+      this.orientation +
+      '&safesearch=' +
+      this.safesearch +
+      '&per_page=' +
+      this.perPage +
+      '&page=' +
+      this.page
+    );
   },
 };
 
@@ -87,48 +109,23 @@ function imgMurkup(imgArray = []) {
   }
 
   refs.galleryEl.lastElementChild.insertAdjacentHTML('afterEnd', markup);
+  console.log(refs.galleryEl.children.length);
 }
 
-async function getImages({
-  url,
-  key,
-  q,
-  imageType,
-  orientation,
-  safesearch,
-  perPage,
-  page,
-}) {
-  const fullUrl =
-    url +
-    '?key=' +
-    key +
-    '&q=' +
-    encodeURIComponent(q) +
-    '&image_type=' +
-    imageType +
-    '&orientation=' +
-    orientation +
-    '&safesearch=' +
-    safesearch +
-    '&per_page=' +
-    perPage +
-    '&page=' +
-    page;
-
+async function getImages() {
   try {
-    if (searchQuery.countPageLimit() < searchQuery.page) {
+    if (searchQuery.countPageLimit() <= searchQuery.page) {
       Notiflix.Notify.failure(
         `We're sorry, but you've reached the end of search results.`
       );
       return;
     }
 
-    const response = await axios.get(fullUrl);
+    const response = await axios.get(searchQuery.createFullUrl());
 
     if (
       response.data.totalHits > 0 &&
-      searchQuery.countPageLimit() >= searchQuery.page
+      searchQuery.countPageLimit() > searchQuery.page
     ) {
       searchQuery.page += 1;
       return {
