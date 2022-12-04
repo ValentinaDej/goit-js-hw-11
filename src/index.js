@@ -1,14 +1,28 @@
 import './css/styles.css';
 import axios from 'axios';
-
+import throttle from 'lodash.throttle';
 import Notiflix from 'notiflix';
 import 'notiflix/dist/notiflix-3.2.5.min.css';
 
 Notiflix.Notify.init({
-  timeout: 5000,
+  timeout: 2000,
 });
 
-const page = 1;
+const THROTTLE_DELAY = 300;
+const searchQuery = {
+  url: 'https://pixabay.com/api/',
+  key: '31094893-91e9afbe8165d9cedcce56644',
+  q: '',
+  imageType: 'photo',
+  orientation: 'horizontal',
+  safesearch: 'true',
+  perPage: 40,
+  page: 1,
+  countPageLimit() {
+    return Math.ceil(500 / this.perPage);
+  },
+};
+
 const refs = {
   formEl: document.querySelector('.search-form'),
   galleryEl: document.querySelector('.gallery'),
@@ -16,24 +30,24 @@ const refs = {
 
 refs.formEl.addEventListener('submit', onSerachFormSubmit);
 
-function onSerachFormSubmit(event) {
-  event.preventDefault();
+(() => {
+  window.addEventListener('scroll', throttle(checkPosition, THROTTLE_DELAY));
+  window.addEventListener('resize', throttle(checkPosition, THROTTLE_DELAY));
+})();
 
-  getImages(refs.formEl.elements.searchQuery.value).then(imgArray =>
-    imgMurkup(imgArray)
-  );
+async function onSerachFormSubmit(event) {
+  event.preventDefault();
+  clearGalleryMarkup();
+  searchQuery.q = refs.formEl.elements.searchQuery.value;
+  await getImages(searchQuery).then(data => {
+    if (data) {
+      Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
+      imgMurkup(data.imgInfo);
+    }
+  });
 }
 
-function imgMurkup(imgArray) {
-  clearGalleryMarkup();
-
-  if (!imgArray.length) {
-    Notiflix.Notify.failure(
-      `Sorry, there are no images matching your search query. Please try again.`
-    );
-    return;
-  }
-
+function imgMurkup(imgArray = []) {
   const markup = imgArray
     .map(imgEl => {
       const {
@@ -67,82 +81,97 @@ function imgMurkup(imgArray) {
     })
     .join('');
 
-  refs.galleryEl.innerHTML = markup;
-  checkPosition();
+  if (!refs.galleryEl.children.length) {
+    refs.galleryEl.innerHTML = markup;
+    return;
+  }
+
+  refs.galleryEl.lastElementChild.insertAdjacentHTML('afterEnd', markup);
 }
 
-const API_KEY = '31094893-91e9afbe8165d9cedcce56644';
-const URL = 'https://pixabay.com/api/?key=' + API_KEY;
+async function getImages({
+  url,
+  key,
+  q,
+  imageType,
+  orientation,
+  safesearch,
+  perPage,
+  page,
+}) {
+  const fullUrl =
+    url +
+    '?key=' +
+    key +
+    '&q=' +
+    encodeURIComponent(q) +
+    '&image_type=' +
+    imageType +
+    '&orientation=' +
+    orientation +
+    '&safesearch=' +
+    safesearch +
+    '&per_page=' +
+    perPage +
+    '&page=' +
+    page;
 
-async function getImages(searchRequest) {
   try {
-    const response = await axios.get(
-      URL +
-        '&q=' +
-        encodeURIComponent(searchRequest) +
-        '&image_type=photo&iorientation=horizontal&safesearch=true&per_page=40'
-    );
-    return response.data.hits;
+    if (searchQuery.countPageLimit() < searchQuery.page) {
+      Notiflix.Notify.failure(
+        `We're sorry, but you've reached the end of search results.`
+      );
+      return;
+    }
+
+    const response = await axios.get(fullUrl);
+
+    if (
+      response.data.totalHits > 0 &&
+      searchQuery.countPageLimit() >= searchQuery.page
+    ) {
+      searchQuery.page += 1;
+      return {
+        imgInfo: response.data.hits,
+        totalHits: response.data.totalHits,
+      };
+    } else if (response.data.totalHits > 0) {
+      Notiflix.Notify.failure(
+        `We're sorry, but you've reached the end of search results.`
+      );
+    } else {
+      Notiflix.Notify.failure(
+        `Sorry, there are no images matching your search query. Please try again.`
+      );
+    }
   } catch (error) {
-    console.error(error);
+    Notiflix.Notify.failure(error.message);
   }
 }
 
 function clearGalleryMarkup() {
   refs.galleryEl.innerHTML = '';
+  searchQuery.page = 1;
 }
 
-function checkPosition() {
-  // Нам потребуется знать высоту документа и высоту экрана:
-  const height = document.body.offsetHeight;
-  const screenHeight = window.innerHeight;
-  console.log(height);
-  console.log(screenHeight);
-  // Они могут отличаться: если на странице много контента,
-  // высота документа будет больше высоты экрана (отсюда и скролл).
-
+async function checkPosition() {
+  // высота документа
+  let height = document.body.offsetHeight;
+  // высота экрана
+  let screenHeight = window.innerHeight;
   // Записываем, сколько пикселей пользователь уже проскроллил:
-
-  //const scrolled = window.scrollY;
-
-  // Обозначим порог, по приближении к которому
-  // будем вызывать какое-то действие.
-  // В нашем случае — четверть экрана до конца страницы:
-
-  //const threshold = height - screenHeight / 4;
-
+  let scrolled = window.scrollY;
+  // Обозначим порог, по приближении к которому будем вызывать какое-то действие.
+  let threshold = height - screenHeight / 4;
   // Отслеживаем, где находится низ экрана относительно страницы:
+  let position = scrolled + screenHeight;
 
-  //const position = scrolled + screenHeight;
-
-  //  if (position >= threshold) {
-  // Если мы пересекли полосу-порог, вызываем нужное действие.
-  //  }
+  if (position >= threshold) {
+    await getImages(searchQuery).then(data => {
+      if (data) {
+        imgMurkup(data.imgInfo);
+      }
+    });
+    window.scroll(0, scrolled);
+  }
 }
-
-// $.getJSON(URL, function(data){
-// if (parseInt(data.totalHits) > 0)
-//     $.each(data.hits, function(i, hit){ console.log(hit.pageURL); });
-// else
-//     console.log('No hits');
-// }
-
-// page	int	Returned search results are paginated. Use this parameter to select the page number.
-// Default: 1
-// per_page	int	Determine the number of results per page.
-// Accepted values: 3 - 200
-// Default: 20
-
-// function getUserAccount() {
-//   return axios.get('/user/12345');
-// }
-
-// function getUserPermissions() {
-//   return axios.get('/user/12345/permissions');
-// }
-
-// Promise.all([getUserAccount(), getUserPermissions()])
-//   .then(function (results) {
-//     const acct = results[0];
-//     const perm = results[1];
-//   });
