@@ -8,7 +8,7 @@ Notiflix.Notify.init({
   timeout: 2000,
 });
 
-const THROTTLE_DELAY = 300;
+const THROTTLE_DELAY = 1000;
 
 const searchQuery = {
   url: 'https://pixabay.com/api/',
@@ -20,11 +20,6 @@ const searchQuery = {
   perPage: 40,
   page: 1,
   loadedAll: false,
-  // pageLimit: 1,
-
-  // countPageLimit() {
-  //   return Math.ceil(500 / this.perPage);
-  // },
 
   createFullUrl() {
     return (
@@ -63,6 +58,9 @@ async function onSerachFormSubmit(event) {
   event.preventDefault();
   clearGalleryMarkup();
   searchQuery.q = refs.formEl.elements.searchQuery.value;
+  searchQuery.loadedAll = false;
+  searchQuery.page = 1;
+
   await getImages(searchQuery).then(data => {
     if (data) {
       Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
@@ -116,20 +114,11 @@ function imgMurkup(imgArray = []) {
 
 async function getImages() {
   try {
-    let response;
-    if (!searchQuery.loadedAll) {
-      response = await axios.get(searchQuery.createFullUrl());
-      // console.log(Math.ceil(response.data.totalHits / searchQuery.perPage));
-      // console.log(searchQuery.page);
-      if (
-        searchQuery.page ===
-        Math.ceil(response.data.totalHits / searchQuery.perPage)
-      ) {
-        searchQuery.loadedAll = true;
-      }
+    if (searchQuery.loadedAll) {
+      return;
     }
 
-    console.log(searchQuery);
+    const response = await axios.get(searchQuery.createFullUrl());
 
     if (response.data.totalHits <= 0) {
       Notiflix.Notify.failure(
@@ -147,10 +136,20 @@ async function getImages() {
         imgInfo: response.data.hits,
         totalHits: response.data.totalHits,
       };
+    } else if (
+      Math.ceil(response.data.totalHits / searchQuery.perPage) ===
+      searchQuery.page
+    ) {
+      searchQuery.loadedAll = true;
+      searchQuery.page += 1;
+      return {
+        imgInfo: response.data.hits,
+        totalHits: response.data.totalHits,
+      };
     } else {
-      Notiflix.Notify.info(
-        `We're sorry, but you've reached the end of search results.`
-      );
+      // Notiflix.Notify.info(
+      //   `We're sorry, but you've reached the end of search results.`
+      // );
     }
   } catch (error) {
     Notiflix.Notify.failure(error.message);
@@ -176,6 +175,13 @@ async function checkPosition() {
 
   if (position >= threshold) {
     window.scroll(0, scrolled);
+    if (searchQuery.loadedAll) {
+      // Notiflix.Notify.info(
+      //   `We're sorry, but you've reached the end of search results.`
+      // );
+      return;
+    }
+
     await getImages(searchQuery).then(data => {
       if (data) {
         imgMurkup(data.imgInfo);
