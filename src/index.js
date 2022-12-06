@@ -19,10 +19,12 @@ const searchQuery = {
   safesearch: 'true',
   perPage: 40,
   page: 1,
+  loadedAll: false,
+  // pageLimit: 1,
 
-  countPageLimit() {
-    return Math.ceil(500 / this.perPage);
-  },
+  // countPageLimit() {
+  //   return Math.ceil(500 / this.perPage);
+  // },
 
   createFullUrl() {
     return (
@@ -109,36 +111,45 @@ function imgMurkup(imgArray = []) {
   }
 
   refs.galleryEl.lastElementChild.insertAdjacentHTML('afterEnd', markup);
-  console.log(refs.galleryEl.children.length);
+  // console.log(refs.galleryEl.children.length);
 }
 
 async function getImages() {
   try {
-    if (searchQuery.countPageLimit() <= searchQuery.page) {
+    let response;
+    if (!searchQuery.loadedAll) {
+      response = await axios.get(searchQuery.createFullUrl());
+      // console.log(Math.ceil(response.data.totalHits / searchQuery.perPage));
+      // console.log(searchQuery.page);
+      if (
+        searchQuery.page ===
+        Math.ceil(response.data.totalHits / searchQuery.perPage)
+      ) {
+        searchQuery.loadedAll = true;
+      }
+    }
+
+    console.log(searchQuery);
+
+    if (response.data.totalHits <= 0) {
       Notiflix.Notify.failure(
-        `We're sorry, but you've reached the end of search results.`
+        `Sorry, there are no images matching your search query. Please try again.`
       );
       return;
     }
 
-    const response = await axios.get(searchQuery.createFullUrl());
-
     if (
-      response.data.totalHits > 0 &&
-      searchQuery.countPageLimit() > searchQuery.page
+      Math.ceil(response.data.totalHits / searchQuery.perPage) >
+      searchQuery.page
     ) {
       searchQuery.page += 1;
       return {
         imgInfo: response.data.hits,
         totalHits: response.data.totalHits,
       };
-    } else if (response.data.totalHits > 0) {
-      Notiflix.Notify.failure(
-        `We're sorry, but you've reached the end of search results.`
-      );
     } else {
-      Notiflix.Notify.failure(
-        `Sorry, there are no images matching your search query. Please try again.`
+      Notiflix.Notify.info(
+        `We're sorry, but you've reached the end of search results.`
       );
     }
   } catch (error) {
@@ -164,11 +175,11 @@ async function checkPosition() {
   let position = scrolled + screenHeight;
 
   if (position >= threshold) {
+    window.scroll(0, scrolled);
     await getImages(searchQuery).then(data => {
       if (data) {
         imgMurkup(data.imgInfo);
       }
     });
-    window.scroll(0, scrolled);
   }
 }
