@@ -1,5 +1,8 @@
 import './css/styles.css';
-import axios from 'axios';
+import getApi from './js/fetchAPI';
+import renderMarkup from './js/renderMarkup';
+import { searchQuery } from './js/dataSearchQuery';
+
 import throttle from 'lodash.throttle';
 import Notiflix from 'notiflix';
 import 'notiflix/dist/notiflix-3.2.5.min.css';
@@ -8,160 +11,76 @@ Notiflix.Notify.init({
   timeout: 2000,
 });
 
+let totalPage;
 const THROTTLE_DELAY = 1000;
-
-const searchQuery = {
-  url: 'https://pixabay.com/api/',
-  key: '31094893-91e9afbe8165d9cedcce56644',
-  q: '',
-  imageType: 'photo',
-  orientation: 'horizontal',
-  safesearch: 'true',
-  perPage: 40,
-  page: 1,
-  loadedAll: false,
-
-  createFullUrl() {
-    return (
-      this.url +
-      '?key=' +
-      this.key +
-      '&q=' +
-      encodeURIComponent(this.q) +
-      '&image_type=' +
-      this.imageType +
-      '&orientation=' +
-      this.orientation +
-      '&safesearch=' +
-      this.safesearch +
-      '&per_page=' +
-      this.perPage +
-      '&page=' +
-      this.page
-    );
-  },
-};
-
 const refs = {
   formEl: document.querySelector('.search-form'),
   galleryEl: document.querySelector('.gallery'),
 };
+const trottledOnPageScroll = throttle(onPageScroll, THROTTLE_DELAY);
 
 refs.formEl.addEventListener('submit', onSerachFormSubmit);
 
-(() => {
-  window.addEventListener('scroll', throttle(checkPosition, THROTTLE_DELAY));
-  window.addEventListener('resize', throttle(checkPosition, THROTTLE_DELAY));
-})();
-
 async function onSerachFormSubmit(event) {
   event.preventDefault();
-  clearGalleryMarkup();
-  searchQuery.q = refs.formEl.elements.searchQuery.value;
-  searchQuery.loadedAll = false;
-  searchQuery.page = 1;
+  clearMarkup();
+  pushTextRequest(refs.formEl.elements.searchQuery.value);
 
-  await getImages(searchQuery).then(data => {
+  await getApi(searchQuery.createFullUrl()).then(data => {
     if (data) {
+      addOnPageScrollEventListener();
       Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
-      imgMurkup(data.imgInfo);
+      totalPage = Math.ceil(data.totalHits / searchQuery.perPage);
+      refs.galleryEl.innerHTML = renderMarkup(data.imgInfo);
+      console.log(refs.galleryEl.children.length);
     }
   });
 }
 
-function imgMurkup(imgArray = []) {
-  const markup = imgArray
-    .map(imgEl => {
-      const {
-        webformatURL,
-        largeImageURL,
-        tags,
-        likes,
-        views,
-        comments,
-        downloads,
-      } = imgEl;
-
-      return `
-      <div class="photo-card">
-      <img src="${webformatURL}" alt="${tags}" loading="lazy" />
-        <div class="info">
-            <p class="info-item">
-            <b>${likes}</b>
-            </p>
-            <p class="info-item">
-            <b>${views}</b>
-            </p>
-            <p class="info-item">
-            <b>${comments}</b>
-            </p>
-            <p class="info-item">
-            <b>${downloads}</b>
-            </p>
-        </div>
-    </div>`;
-    })
-    .join('');
-
-  if (!refs.galleryEl.children.length) {
-    refs.galleryEl.innerHTML = markup;
+async function onPageScroll() {
+  if (searchQuery.loadedAll) {
+    removeOnPageScrollEventListener();
     return;
   }
 
-  refs.galleryEl.lastElementChild.insertAdjacentHTML('afterEnd', markup);
-  // console.log(refs.galleryEl.children.length);
-}
-
-async function getImages() {
-  try {
-    if (searchQuery.loadedAll) {
-      return;
-    }
-
-    const response = await axios.get(searchQuery.createFullUrl());
-
-    if (response.data.totalHits <= 0) {
-      Notiflix.Notify.failure(
-        `Sorry, there are no images matching your search query. Please try again.`
-      );
-      return;
-    }
-
-    if (
-      Math.ceil(response.data.totalHits / searchQuery.perPage) >
-      searchQuery.page
-    ) {
+  if (chekScrollPositionForDownload() && !searchQuery.loadedAll) {
+    if (totalPage > searchQuery.page) {
       searchQuery.page += 1;
-      return {
-        imgInfo: response.data.hits,
-        totalHits: response.data.totalHits,
-      };
-    } else if (
-      Math.ceil(response.data.totalHits / searchQuery.perPage) ===
-      searchQuery.page
-    ) {
-      searchQuery.loadedAll = true;
-      searchQuery.page += 1;
-      return {
-        imgInfo: response.data.hits,
-        totalHits: response.data.totalHits,
-      };
+
+      await getApi(searchQuery.createFullUrl()).then(data => {
+        if (data) {
+          refs.galleryEl.lastElementChild.insertAdjacentHTML(
+            'afterEnd',
+            renderMarkup(data.imgInfo)
+          );
+          console.log(refs.galleryEl.children.length);
+        }
+      });
+
+      window.scroll(0, window.scrollY);
     } else {
-      // Notiflix.Notify.info(
-      //   `We're sorry, but you've reached the end of search results.`
-      // );
+      searchQuery.loadedAll = true;
+      Notiflix.Notify.info(
+        `We're sorry, but you've reached the end of search results.`
+      );
     }
-  } catch (error) {
-    Notiflix.Notify.failure(error.message);
   }
 }
 
-function clearGalleryMarkup() {
+function clearMarkup() {
   refs.galleryEl.innerHTML = '';
+}
+
+function pushTextRequest(textRequest) {
+  searchQuery.q = textRequest;
+  searchQuery.loadedAll = false;
   searchQuery.page = 1;
 }
 
-async function checkPosition() {
+function chekScrollPositionForDownload() {
+  //перевірка на положення скрола внизу док
+  // window.scrollY + window.innerHeight >= document.body.scrollHeight
+
   // высота документа
   let height = document.body.offsetHeight;
   // высота экрана
@@ -173,19 +92,15 @@ async function checkPosition() {
   // Отслеживаем, где находится низ экрана относительно страницы:
   let position = scrolled + screenHeight;
 
-  if (position >= threshold) {
-    window.scroll(0, scrolled);
-    if (searchQuery.loadedAll) {
-      // Notiflix.Notify.info(
-      //   `We're sorry, but you've reached the end of search results.`
-      // );
-      return;
-    }
+  return position >= threshold;
+}
 
-    await getImages(searchQuery).then(data => {
-      if (data) {
-        imgMurkup(data.imgInfo);
-      }
-    });
-  }
+function removeOnPageScrollEventListener() {
+  window.removeEventListener('scroll', trottledOnPageScroll);
+  window.removeEventListener('resize', trottledOnPageScroll);
+}
+
+function addOnPageScrollEventListener() {
+  window.addEventListener('scroll', trottledOnPageScroll);
+  window.addEventListener('resize', trottledOnPageScroll);
 }
