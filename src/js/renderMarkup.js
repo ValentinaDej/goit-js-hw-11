@@ -11,9 +11,9 @@ export default function renderMurkup(imgArray = []) {
         downloads,
       } = imgEl;
 
-      return `
-      <div class="photo-card">
-      <img src="${webformatURL}" alt="${tags}" loading="lazy" />
+      return `<div class="photo-card">
+      <a href="${largeImageURL}">
+      <img class="preview-image" src="${webformatURL}" alt="${tags}" loading="lazy" /></a>
         <div class="info">
             <p class="info-item">
             <b>${likes}</b>
@@ -31,6 +31,5 @@ export default function renderMurkup(imgArray = []) {
     </div>`;
     })
     .join('');
-
   return markup;
 }

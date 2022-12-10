@@ -1,4 +1,5 @@
-import './css/styles.css';
+// import './css/styles.css';
+// import './css/01-gallery.css';
 import getApi from './js/fetchAPI';
 import renderMarkup from './js/renderMarkup';
 import { searchQuery } from './js/dataSearchQuery';
@@ -6,6 +7,14 @@ import { searchQuery } from './js/dataSearchQuery';
 import throttle from 'lodash.throttle';
 import Notiflix from 'notiflix';
 import 'notiflix/dist/notiflix-3.2.5.min.css';
+import SimpleLightbox from 'simplelightbox';
+import 'simplelightbox/dist/simple-lightbox.min.css';
+
+const lightbox = new SimpleLightbox('.gallery a', {
+  captionsData: 'alt',
+  captionPosition: 'bottom',
+  captionDelay: 250,
+});
 
 Notiflix.Notify.init({
   timeout: 2000,
@@ -17,6 +26,7 @@ const refs = {
   formEl: document.querySelector('.search-form'),
   galleryEl: document.querySelector('.gallery'),
 };
+
 const trottledOnPageScroll = throttle(onPageScroll, THROTTLE_DELAY);
 
 refs.formEl.addEventListener('submit', onSerachFormSubmit);
@@ -32,7 +42,9 @@ async function onSerachFormSubmit(event) {
       Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
       totalPage = Math.ceil(data.totalHits / searchQuery.perPage);
       refs.galleryEl.innerHTML = renderMarkup(data.imgInfo);
-      console.log(refs.galleryEl.children.length);
+      lightbox.refresh();
+      // console.log(refs.galleryEl.children.length);
+      intreactiveLiteBox();
     }
   });
 }
@@ -53,7 +65,9 @@ async function onPageScroll() {
             'afterEnd',
             renderMarkup(data.imgInfo)
           );
-          console.log(refs.galleryEl.children.length);
+          lightbox.refresh();
+          // console.log(refs.galleryEl.children.length);
+          intreactiveLiteBox();
         }
       });
 
@@ -103,4 +117,21 @@ function removeOnPageScrollEventListener() {
 function addOnPageScrollEventListener() {
   window.addEventListener('scroll', trottledOnPageScroll);
   window.addEventListener('resize', trottledOnPageScroll);
+}
+
+function intreactiveLiteBox() {
+  let elementInFocus;
+  lightbox.on('next.simplelightbox', function () {});
+  //  lightbox.on('prevDone.simplelightbox', function () {
+  // console.log(lightbox);
+  // console.log(lightbox.elements);
+  // console.log(lightbox.currentImageIndex);
+  //});
+  lightbox.on('close.simplelightbox', function () {
+    elementInFocus =
+      refs.galleryEl.children[lightbox.currentImageIndex].firstElementChild;
+  });
+  lightbox.on('closed.simplelightbox', function () {
+    elementInFocus.focus();
+  });
 }
