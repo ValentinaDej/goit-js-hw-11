@@ -1,5 +1,3 @@
-// import './css/styles.css';
-// import './css/01-gallery.css';
 import getApi from './js/fetchAPI';
 import renderMarkup from './js/renderMarkup';
 import { searchQuery } from './js/dataSearchQuery';
@@ -25,6 +23,7 @@ const THROTTLE_DELAY = 1000;
 const refs = {
   formEl: document.querySelector('.search-form'),
   galleryEl: document.querySelector('.gallery'),
+  boxEl: document.querySelector('.box'),
 };
 
 const trottledOnPageScroll = throttle(onPageScroll, THROTTLE_DELAY);
@@ -32,6 +31,9 @@ const trottledOnPageScroll = throttle(onPageScroll, THROTTLE_DELAY);
 refs.formEl.addEventListener('submit', onSerachFormSubmit);
 
 async function onSerachFormSubmit(event) {
+  if (!refs.formEl.elements.searchQuery.value) {
+    return;
+  }
   event.preventDefault();
   clearMarkup();
   pushTextRequest(refs.formEl.elements.searchQuery.value);
@@ -102,7 +104,7 @@ function chekScrollPositionForDownload() {
   // Записываем, сколько пикселей пользователь уже проскроллил:
   let scrolled = window.scrollY;
   // Обозначим порог, по приближении к которому будем вызывать какое-то действие.
-  let threshold = height - screenHeight / 4;
+  let threshold = height - screenHeight;
   // Отслеживаем, где находится низ экрана относительно страницы:
   let position = scrolled + screenHeight;
 
@@ -121,12 +123,6 @@ function addOnPageScrollEventListener() {
 
 function intreactiveLiteBox() {
   let elementInFocus;
-  lightbox.on('next.simplelightbox', function () {});
-  //  lightbox.on('prevDone.simplelightbox', function () {
-  // console.log(lightbox);
-  // console.log(lightbox.elements);
-  // console.log(lightbox.currentImageIndex);
-  //});
   lightbox.on('close.simplelightbox', function () {
     elementInFocus =
       refs.galleryEl.children[lightbox.currentImageIndex].firstElementChild;
