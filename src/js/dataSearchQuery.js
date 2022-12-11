@@ -8,26 +8,6 @@ const searchQuery = {
   perPage: 40,
   page: 1,
   loadedAll: false,
-
-  createFullUrl() {
-    return (
-      this.url +
-      '?key=' +
-      this.key +
-      '&q=' +
-      encodeURIComponent(this.q) +
-      '&image_type=' +
-      this.imageType +
-      '&orientation=' +
-      this.orientation +
-      '&safesearch=' +
-      this.safesearch +
-      '&per_page=' +
-      this.perPage +
-      '&page=' +
-      this.page
-    );
-  },
 };
 
 export { searchQuery };

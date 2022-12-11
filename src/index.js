@@ -38,16 +38,20 @@ async function onSerachFormSubmit(event) {
   clearMarkup();
   pushTextRequest(refs.formEl.elements.searchQuery.value);
 
-  await getApi(searchQuery.createFullUrl()).then(data => {
-    if (data) {
-      addOnPageScrollEventListener();
-      Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
-      totalPage = Math.ceil(data.totalHits / searchQuery.perPage);
-      refs.galleryEl.innerHTML = renderMarkup(data.imgInfo);
-      lightbox.refresh();
-      // console.log(refs.galleryEl.children.length);
-      intreactiveLiteBox();
+  await getApi(searchQuery).then(data => {
+    if (data.totalHits <= 0) {
+      Notiflix.Notify.failure(
+        `Sorry, there are no images matching your search query. Please try again.`
+      );
+      return;
     }
+
+    addOnPageScrollEventListener();
+    Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
+    totalPage = Math.ceil(data.totalHits / searchQuery.perPage);
+    refs.galleryEl.innerHTML = renderMarkup(data.hits);
+    lightbox.refresh();
+    intreactiveLiteBox();
   });
 }
 
@@ -61,16 +65,20 @@ async function onPageScroll() {
     if (totalPage > searchQuery.page) {
       searchQuery.page += 1;
 
-      await getApi(searchQuery.createFullUrl()).then(data => {
-        if (data) {
-          refs.galleryEl.lastElementChild.insertAdjacentHTML(
-            'afterEnd',
-            renderMarkup(data.imgInfo)
+      await getApi(searchQuery).then(data => {
+        if (data.totalHits <= 0) {
+          Notiflix.Notify.failure(
+            `Sorry, there are no images matching your search query. Please try again.`
           );
-          lightbox.refresh();
-          // console.log(refs.galleryEl.children.length);
-          intreactiveLiteBox();
+          return;
         }
+
+        refs.galleryEl.lastElementChild.insertAdjacentHTML(
+          'afterEnd',
+          renderMarkup(data.hits)
+        );
+        lightbox.refresh();
+        intreactiveLiteBox();
       });
 
       window.scroll(0, window.scrollY);
