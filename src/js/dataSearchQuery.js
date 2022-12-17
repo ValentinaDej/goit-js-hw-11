@@ -5,7 +5,7 @@ const searchQuery = {
   imageType: 'photo',
   orientation: 'horizontal',
   safesearch: 'true',
-  perPage: 40,
+  perPage: 20,
   page: 1,
   loadedAll: false,
 };

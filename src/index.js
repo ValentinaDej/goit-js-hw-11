@@ -2,7 +2,6 @@ import getApi from './js/fetchAPI';
 import renderMarkup from './js/renderMarkup';
 import { searchQuery } from './js/dataSearchQuery';
 
-import throttle from 'lodash.throttle';
 import Notiflix from 'notiflix';
 import 'notiflix/dist/notiflix-3.2.5.min.css';
 import SimpleLightbox from 'simplelightbox';
@@ -18,15 +17,11 @@ Notiflix.Notify.init({
   timeout: 2000,
 });
 
-let totalPage;
-const THROTTLE_DELAY = 1000;
+let totalPage = 1;
 const refs = {
   formEl: document.querySelector('.search-form'),
   galleryEl: document.querySelector('.gallery'),
-  boxEl: document.querySelector('.box'),
 };
-
-const trottledOnPageScroll = throttle(onPageScroll, THROTTLE_DELAY);
 
 refs.formEl.addEventListener('submit', onSerachFormSubmit);
 
@@ -37,58 +32,7 @@ async function onSerachFormSubmit(event) {
   event.preventDefault();
   clearMarkup();
   pushTextRequest(refs.formEl.elements.searchQuery.value);
-
-  await getApi(searchQuery).then(data => {
-    if (data.totalHits <= 0) {
-      Notiflix.Notify.failure(
-        `Sorry, there are no images matching your search query. Please try again.`
-      );
-      return;
-    }
-
-    addOnPageScrollEventListener();
-    Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
-    totalPage = Math.ceil(data.totalHits / searchQuery.perPage);
-    refs.galleryEl.innerHTML = renderMarkup(data.hits);
-    lightbox.refresh();
-    intreactiveLiteBox();
-  });
-}
-
-async function onPageScroll() {
-  if (searchQuery.loadedAll) {
-    removeOnPageScrollEventListener();
-    return;
-  }
-
-  if (chekScrollPositionForDownload() && !searchQuery.loadedAll) {
-    if (totalPage > searchQuery.page) {
-      searchQuery.page += 1;
-
-      await getApi(searchQuery).then(data => {
-        if (data.totalHits <= 0) {
-          Notiflix.Notify.failure(
-            `Sorry, there are no images matching your search query. Please try again.`
-          );
-          return;
-        }
-
-        refs.galleryEl.lastElementChild.insertAdjacentHTML(
-          'afterEnd',
-          renderMarkup(data.hits)
-        );
-        lightbox.refresh();
-        intreactiveLiteBox();
-      });
-
-      window.scroll(0, window.scrollY);
-    } else {
-      searchQuery.loadedAll = true;
-      Notiflix.Notify.info(
-        `We're sorry, but you've reached the end of search results.`
-      );
-    }
-  }
+  loadContent();
 }
 
 function clearMarkup() {
@@ -101,34 +45,6 @@ function pushTextRequest(textRequest) {
   searchQuery.page = 1;
 }
 
-function chekScrollPositionForDownload() {
-  //перевірка на положення скрола внизу док
-  // window.scrollY + window.innerHeight >= document.body.scrollHeight
-
-  // высота документа
-  let height = document.body.offsetHeight;
-  // высота экрана
-  let screenHeight = window.innerHeight;
-  // Записываем, сколько пикселей пользователь уже проскроллил:
-  let scrolled = window.scrollY;
-  // Обозначим порог, по приближении к которому будем вызывать какое-то действие.
-  let threshold = height - screenHeight;
-  // Отслеживаем, где находится низ экрана относительно страницы:
-  let position = scrolled + screenHeight;
-
-  return position >= threshold;
-}
-
-function removeOnPageScrollEventListener() {
-  window.removeEventListener('scroll', trottledOnPageScroll);
-  window.removeEventListener('resize', trottledOnPageScroll);
-}
-
-function addOnPageScrollEventListener() {
-  window.addEventListener('scroll', trottledOnPageScroll);
-  window.addEventListener('resize', trottledOnPageScroll);
-}
-
 function intreactiveLiteBox() {
   let elementInFocus;
   lightbox.on('close.simplelightbox', function () {
@@ -139,3 +55,73 @@ function intreactiveLiteBox() {
     elementInFocus.focus();
   });
 }
+
+async function loadContent() {
+  if (searchQuery.loadedAll) {
+    return;
+  }
+
+  if (totalPage >= searchQuery.page) {
+    await getApi(searchQuery).then(data => {
+      if (data.totalHits <= 0) {
+        Notiflix.Notify.failure(
+          `Sorry, there are no images matching your search query. Please try again.`
+        );
+        return;
+      }
+
+      if (searchQuery.page === 1) {
+        Notiflix.Notify.success(`Hooray! We found ${data.totalHits} images.`);
+        totalPage = Math.ceil(data.totalHits / searchQuery.perPage);
+      }
+
+      const promise = new Promise(resolve => {
+        resolve(renderMarkup(data.hits));
+      });
+
+      promise
+        .then(value => {
+          refs.galleryEl.insertAdjacentHTML(
+            'beforeEnd',
+            renderMarkup(data.hits)
+          );
+          searchQuery.page += 1;
+        })
+        .then(value => {
+          lightbox.refresh();
+          intreactiveLiteBox();
+
+          observer.observe(document.querySelector('.photo-card'));
+        })
+        .catch(error => {
+          console.log(error);
+        });
+    });
+  } else {
+    searchQuery.loadedAll = true;
+    if (totalPage != 1) {
+      Notiflix.Notify.info(
+        `We're sorry, but you've reached the end of search results.`
+      );
+    }
+  }
+}
+
+let observer = new IntersectionObserver(
+  (entries, observer) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        loadContent();
+        return;
+      }
+      if (refs.galleryEl.childNodes.length) {
+        observer.unobserve(entry.target);
+        observer.observe(document.querySelector('.photo-card:last-child'));
+        searchQuery.perPage = 40;
+      }
+    });
+  },
+  {
+    threshold: 0,
+  }
+);

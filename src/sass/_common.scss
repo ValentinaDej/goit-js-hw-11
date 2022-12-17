@@ -58,10 +58,6 @@ input.search-input:focus-visible {
   transition: transform 250ms linear;
 }
 
-// .preview-image:hover {
-//   transform: scale(1.05);
-// }
-
 .photo-card {
   flex-basis: calc((100% - 40px) / 3);
   border: solid grey 2px;
